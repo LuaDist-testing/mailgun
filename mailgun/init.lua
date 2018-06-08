@@ -1,8 +1,8 @@
 local ltn12 = require("ltn12")
-local encode_base64, encode_query_string
+local encode_base64, encode_query_string, parse_query_string
 do
   local _obj_0 = require("mailgun.util")
-  encode_base64, encode_query_string = _obj_0.encode_base64, _obj_0.encode_query_string
+  encode_base64, encode_query_string, parse_query_string = _obj_0.encode_base64, _obj_0.encode_query_string, _obj_0.parse_query_string
 end
 local concat
 concat = table.concat
@@ -24,11 +24,38 @@ add_recipients = function(data, field, emails)
     data[field] = emails
   end
 end
+local items_method
+items_method = function(path, items_field, paging_field)
+  if items_field == nil then
+    items_field = "items"
+  end
+  if paging_field == nil then
+    paging_field = "paging"
+  end
+  return function(self, opts)
+    if opts == nil then
+      opts = { }
+    end
+    local res, err = self:api_request(tostring(path) .. "?" .. tostring(encode_query_string(opts)))
+    if res then
+      return res[items_field], res[paging_field]
+    else
+      return nil, err
+    end
+  end
+end
 local Mailgun
 do
   local _class_0
   local _base_0 = {
     api_path = "https://api.mailgun.net/v3/",
+    for_domain = function(self, domain)
+      return Mailgun({
+        domain = domain,
+        api_key = self.api_key,
+        http = self.http_provider
+      })
+    end,
     http = function(self)
       if not (self._http) then
         self.http_provider = self.http_provider or (function()
@@ -141,7 +168,7 @@ do
     get_campaigns = function(self)
       local res, err = self:api_request("/campaigns")
       if res then
-        return res.items
+        return res.items, res
       else
         return res, err
       end
@@ -150,7 +177,56 @@ do
       local params = encode_query_string({
         event = "stored"
       })
-      return self:api_request("/events?" .. tostring(params))
+      local res, err = self:api_request("/events?" .. tostring(params))
+      if res then
+        return res.items, res.paging
+      else
+        return nil, err
+      end
+    end,
+    get_unsubscribes = items_method("/unsubscribes"),
+    each_unsubscribe = function(self)
+      return self:_each_item(self.get_unsubscribes, "address")
+    end,
+    get_bounces = items_method("/bounces"),
+    each_bounce = function(self)
+      return self:_each_item(self.get_bounces, "address")
+    end,
+    get_complaints = items_method("/complaints"),
+    each_complaint = function(self)
+      return self:_each_item(self.get_complaints, "address")
+    end,
+    _each_item = function(self, getter, paging_field)
+      local parse_url = require("socket.url").parse
+      local after_value
+      return coroutine.wrap(function()
+        while true do
+          local opts = {
+            limit = 1000,
+            page = after_value and "next",
+            [paging_field] = after_value
+          }
+          local page, paging = getter(self, opts)
+          if not (page) then
+            return 
+          end
+          if not (next(page)) then
+            return 
+          end
+          for _index_0 = 1, #page do
+            local item = page[_index_0]
+            coroutine.yield(item)
+          end
+          if not (paging and paging.next) then
+            return 
+          end
+          local q = parse_query_string(parse_url(paging.next).query)
+          after_value = q and q[paging_field]
+          if not (after_value) then
+            return 
+          end
+        end
+      end)
     end,
     get_or_create_campaign_id = function(self, campaign_name)
       local campaign_id
@@ -166,7 +242,8 @@ do
         campaign_id = assert(self:create_campaign(campaign_name)).id
       end
       return campaign_id
-    end
+    end,
+    get_stats = function(self) end
   }
   _base_0.__index = _base_0
   _class_0 = setmetatable({
@@ -179,7 +256,7 @@ do
       self.http_provider = opts.http
       self.domain = opts.domain
       self.api_key = opts.api_key
-      self.default_sender = tostring(opts.domain) .. " <postmaster@" .. tostring(opts.domain) .. ">"
+      self.default_sender = opts.default_sender or tostring(opts.domain) .. " <postmaster@" .. tostring(opts.domain) .. ">"
     end,
     __base = _base_0,
     __name = "Mailgun"
@@ -196,5 +273,5 @@ do
 end
 return {
   Mailgun = Mailgun,
-  VERSION = "1.0.0"
+  VERSION = "1.1.0"
 }

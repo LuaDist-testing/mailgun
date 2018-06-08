@@ -1,17 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "mailgun"
-version = "1.0.0-1"
+version = "1.1.0-1"
 
 -- LuaDist source
 source = {
-  tag = "1.0.0-1",
+  tag = "1.1.0-1",
   url = "git://github.com/LuaDist-testing/mailgun.git"
 }
 -- Original source
 -- source = {
 --   url = "git://github.com/leafo/lua-mailgun.git",
---   branch = "v1.0.0"
+--   branch = "v1.1.0"
 -- }
 
 description = {
@@ -25,12 +25,13 @@ dependencies = {
   "lpeg",
   "luasocket",
   "lua-cjson",
+  "luasec",
 }
 
 build = {
   type = "builtin",
   modules = {
     ["mailgun"] = "mailgun/init.lua",
-    ["mailgun.util"] = "mailgun/util.lua",
+    ["mailgun1util"] = "mailgun/util.lua",
   }
 }

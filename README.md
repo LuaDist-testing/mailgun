@@ -1,5 +1,7 @@
 # mailgun
 
+[![Build Status](https://travis-ci.org/leafo/lua-mailgun.svg?branch=master)](https://travis-ci.org/leafo/lua-mailgun)
+
 A Lua library for sending emails and interacting with the
 [Mailgun](https://mailgun.com/) API. Compatible with OpenResty via Lapis HTTP
 API, or any other Lua script via LuaSocket.
@@ -38,7 +40,6 @@ m:send_email({
 luarocks install mailgun
 ```
 
-
 ## Reference
 
 The `Mailgun` constructor can be used to create a new client to Mailgun. It's
@@ -57,9 +58,10 @@ The following options are valid:
 
 * `domain` - the domain to use for API requests **required**
 * `api_key` - the API key to authenticate requests **required**
+* `default_sender` - the sender to use for `send_email` when a sender is not provided *optional*
 
-The default sender of any email is constructed from the `domain` like this:
-`{domain} <postmaster@{domain}>`.
+The value of `default_sender` has a default created from the `domain` like
+this: `{domain} <postmaster@{domain}>`.
 
 ### Methods
 
@@ -136,7 +138,7 @@ mailgun:send_email({
 
 Creates a new campaign named `name`. Retruns the campaign object
 
-#### `mailgun:get_campaigns()`
+#### `campaigns = mailgun:get_campaigns()`
 
 Gets all the campaigns that are available
 
@@ -144,9 +146,62 @@ Gets all the campaigns that are available
 
 Gets a campaign id for a campaign by name. If it doesn't exist yet a new one is created.
 
-#### `mailgun:get_messages()`
+#### `messages, paging = mailgun:get_messages()`
 
-Gets the first page of stored messages
+Gets the first page of stored messages (this uses the events API). The paging
+object includes the urls for fetching subsequent pages.
+
+#### `unsubscribes, paging = mailgun:get_unsubscribes(opts={})`
+
+https://documentation.mailgun.com/api-suppressions.html#unsubscribes
+
+Gets the first page of unsubscribes messages. `opts` is passed as query string
+parameters.
+
+#### `iter = mailgun:each_unsubscribe()`
+
+Iterates through each message (fetching each page as needed)
+
+```lua
+for unsub in mailgun:each_unsubscribe() do
+  print(unsub.address)
+end
+```
+
+#### `bounces, paging = mailgun:get_bounces(opts={})`
+
+https://documentation.mailgun.com/api-suppressions.html#bounces
+
+Gets the first page of unsubscribes bounces. `opts` is passed as query string
+parameters.
+
+#### `iter = mailgun:each_bounce()`
+
+Iterates through each bounce (fetching each page as needed). Similar to
+`get_unsubscribes`.
+
+#### `complaints, paging = mailgun:get_complaints(opts={})`
+
+https://documentation.mailgun.com/api-suppressions.html#view-all-complaints
+
+Gets the first page of complaints messages. `opts` is passed as query string
+parameters.
+
+#### `iter = mailgun:each_complaint()`
+
+Iterates through each complaint (fetching each page as needed). Similar to
+`get_unsubscribes`.
 
 
+#### `new_mailgun = mailgun:for_domain(domain)`
+
+Returns a new instance of the API client configured the same way, but with the
+domain replaced with the provided domain. If you have multiple domains on your
+account you can use this to switch to them for any of the `get_` methods.
+
+
+# Changelog
+
+* 1.1.0 — 2016-04-8 — Added methods to fetch supressions, added `for_domain`
+* 1.0.0 — 2016-02-6 — Initial release
 

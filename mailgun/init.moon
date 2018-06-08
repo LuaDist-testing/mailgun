@@ -1,7 +1,7 @@
 
 ltn12 = require "ltn12"
 
-import encode_base64, encode_query_string from require "mailgun.util"
+import encode_base64, encode_query_string, parse_query_string from require "mailgun.util"
 import concat from table
 
 json = require "cjson"
@@ -15,6 +15,15 @@ add_recipients = (data, field, emails) ->
   else
     data[field] = emails
 
+items_method = (path, items_field="items", paging_field="paging") ->
+  (opts={}) =>
+    res, err = @api_request "#{path}?#{encode_query_string opts}"
+
+    if res
+      res[items_field], res[paging_field]
+    else
+      nil, err
+
 class Mailgun
   api_path: "https://api.mailgun.net/v3/"
 
@@ -25,7 +34,15 @@ class Mailgun
     @http_provider = opts.http
     @domain = opts.domain
     @api_key = opts.api_key
-    @default_sender = "#{opts.domain} <postmaster@#{opts.domain}>"
+    @default_sender = opts.default_sender or "#{opts.domain} <postmaster@#{opts.domain}>"
+
+  -- create a new instance on another domain
+  for_domain: (domain) =>
+    Mailgun {
+      domain: domain
+      api_key: @api_key
+      http: @http_provider
+    }
 
   http: =>
     unless @_http
@@ -127,13 +144,55 @@ class Mailgun
     res, err = @api_request "/campaigns"
 
     if res
-      res.items
+      res.items, res
     else
       res, err
 
   get_messages: =>
     params = encode_query_string { event: "stored" }
-    @api_request "/events?#{params}"
+
+    res, err = @api_request "/events?#{params}"
+
+    if res
+      res.items, res.paging
+    else
+      nil, err
+
+  get_unsubscribes: items_method "/unsubscribes"
+  each_unsubscribe: => @_each_item @get_unsubscribes, "address"
+
+  get_bounces: items_method "/bounces"
+  each_bounce: => @_each_item @get_bounces, "address"
+
+  get_complaints: items_method "/complaints"
+  each_complaint: => @_each_item @get_complaints, "address"
+
+  -- iterate through every item in basic paging api endpoint
+  _each_item: (getter, paging_field) =>
+    parse_url = require("socket.url").parse
+
+    local after_value
+
+    coroutine.wrap ->
+      while true
+        opts = {
+          limit: 1000
+          page: after_value and "next"
+          [paging_field]: after_value
+        }
+
+        page, paging = getter @, opts
+
+        return unless page
+        return unless next page
+
+        for item in *page
+          coroutine.yield item
+
+        return unless paging and paging.next
+        q = parse_query_string parse_url(paging.next).query
+        after_value = q and q[paging_field]
+        return unless after_value
 
   get_or_create_campaign_id: (campaign_name) =>
     local campaign_id
@@ -148,4 +207,6 @@ class Mailgun
 
     campaign_id
 
-{ :Mailgun, VERSION: "1.0.0" }
+  get_stats: =>
+
+{ :Mailgun, VERSION: "1.1.0" }

@@ -12,15 +12,18 @@ describe "mailgun", ->
   send_fail = ->
     400, [[{"message": "'from' parameter is missing" }]]
 
+  stub_http = (...) ->
+    table.insert http_responses, {...}
+
   before_each ->
     http_requests = {}
     http_responses = {}
     http = -> {
       request: (opts) ->
         table.insert http_requests, opts
-        for k,v in pairs http_responses
-          if (opts.url or "")\match k
-            status, body = v!
+        for {patern, response} in *http_responses
+          if (opts.url or "")\match patern
+            status, body = response!
 
             if sink = body and opts.sink
               sink body
@@ -96,7 +99,7 @@ describe "mailgun", ->
 
     describe "send_email", ->
       it "sends an email", ->
-        http_responses["."] = send_success
+        stub_http ".", send_success
 
         email_html = [[
           <h1>Hello world</h1>
@@ -134,7 +137,7 @@ describe "mailgun", ->
         }, parse_body req
 
       it "sends an email to many people", ->
-        http_responses["."] = send_success
+        stub_http ".", send_success
 
         assert mailgun\send_email {
           to: { "you2@example.com", "you3@example.com" }
@@ -152,7 +155,7 @@ describe "mailgun", ->
         }, parse_body req
 
       it "sends an email with recipient vars and other options", ->
-        http_responses["."] = send_success
+        stub_http ".", send_success
 
         assert mailgun\send_email {
           to: { "you2@example.com", "you3@example.com" }
@@ -188,7 +191,7 @@ describe "mailgun", ->
 
 
       it "handles server error", ->
-        http_responses["."] = send_fail
+        stub_http ".", send_fail
 
         res, err = mailgun\send_email {
           to: { "you2@example.com", "you3@example.com" }
@@ -199,13 +202,13 @@ describe "mailgun", ->
         assert.same {nil, "'from' parameter is missing"}, {res, err}
 
     it "creates campaign", ->
-      http_responses["."] = ->
+      stub_http ".", ->
         200, [[{"campaign": {"id": 123}}]]
 
       assert mailgun\create_campaign "hello"
 
     it "gets campaigns", ->
-      http_responses["."] = ->
+      stub_http ".", ->
         200, [[ { "items": [{"id": 123}] } ]]
 
       res = assert mailgun\get_campaigns!
@@ -214,17 +217,67 @@ describe "mailgun", ->
       }, res
 
     it "gets messages", ->
-      http_responses["."] = ->
+      stub_http ".", ->
         200, [[ { "items": [{"id": 123}] } ]]
 
       assert mailgun\get_messages!
 
     it "gets or creates campaign", ->
-      http_responses["."] = ->
+      stub_http ".", ->
         200, [[ {
           "items": [{"name": "cool", "id": 123}]
         } ]]
 
       res = assert mailgun\get_or_create_campaign_id "cool"
       assert.same 123, res
+
+    it "get unsubscribes", ->
+      stub_http "/unsubscribes", ->
+        200, [[ { "items": [{"id": 123}] } ]]
+
+      assert.same { {id: 123} }, mailgun\get_unsubscribes!
+
+    it "get bounces", ->
+      stub_http "/bounces", ->
+        200, [[ { "items": [{"id": 123}] } ]]
+
+      assert.same { {id: 123} }, mailgun\get_bounces!
+
+    it "get complaints", ->
+      stub_http "/complaints", ->
+        200, [[ { "items": [{"id": 123}] } ]]
+
+      assert.same { {id: 123} }, mailgun\get_complaints!
+
+    it "iterates unsubscribes with one page", ->
+      stub_http "/unsubscribes", ->
+        200, [[ { "items": [{"id": 123}, {"id": 999}] } ]]
+
+      assert.same {
+        {id: 123}
+        {id: 999}
+      },[u for u in mailgun\each_unsubscribe!]
+
+    it "iterates unsubscribes with two pages", ->
+      -- second page
+      stub_http "/unsubscribes.-page=next", ->
+        200, [[ {
+          "items": [{"id": 22}, {"id": 23}]
+        } ]]
+
+      -- first page
+      stub_http "/unsubscribes", ->
+        200, [[ {
+          "items": [{"id": 12}, {"id": 13}],
+          "paging": {"next": "test.com?address=next@email.com"}
+        } ]]
+
+      assert.same {
+        {id: 12}
+        {id: 13}
+        {id: 22}
+        {id: 23}
+      },[u for u in mailgun\each_unsubscribe!]
+
+
 
