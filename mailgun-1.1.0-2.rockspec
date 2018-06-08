@@ -1,11 +1,11 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "mailgun"
-version = "1.1.0-1"
+version = "1.1.0-2"
 
 -- LuaDist source
 source = {
-  tag = "1.1.0-1",
+  tag = "1.1.0-2",
   url = "git://github.com/LuaDist-testing/mailgun.git"
 }
 -- Original source
@@ -32,6 +32,6 @@ build = {
   type = "builtin",
   modules = {
     ["mailgun"] = "mailgun/init.lua",
-    ["mailgun1util"] = "mailgun/util.lua",
+    ["mailgun.util"] = "mailgun/util.lua",
   }
 }
